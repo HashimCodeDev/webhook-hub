@@ -43,32 +43,44 @@ export async function sendDiscordEmbed(webhookUrl, embedData) {
  * @returns {Object} - Discord embed object
  */
 export function createHuggingFaceEmbed(payload) {
+	// Extract information from the actual HF webhook payload structure
+	const repoName = payload.repo?.name || "unknown";
+	const repoUrl =
+		payload.repo?.url?.web || `https://huggingface.co/${repoName}`;
+	const repoType = payload.repo?.type || "repository";
+	const headSha = payload.repo?.headSha;
+
+	// Get updated refs information for commit details
+	const updatedRefs = payload.updatedRefs || [];
+	const mainRef =
+		updatedRefs.find((ref) => ref.ref === "refs/heads/main") || updatedRefs[0];
+	const commitSha = mainRef?.newSha || headSha;
+
 	const embed = {
-		title: `🚀 New Push to Hugging Face Repo`,
-		description: `A fresh commit just landed in **\`${
-			payload.repo?.name || "unknown"
-		}\`**.`,
+		title: `🚀 New Push to Hugging Face ${
+			repoType.charAt(0).toUpperCase() + repoType.slice(1)
+		}`,
+		description: `A fresh commit just landed in **\`${repoName}\`**.`,
 		color: 0xffd700, // Gold
-		url:
-			payload.repo?.url || `https://huggingface.co/${payload.repo?.name || ""}`,
+		url: repoUrl,
 		timestamp: new Date().toISOString(),
 		thumbnail: {
 			url: "https://huggingface.co/front/assets/huggingface_logo-noborder.svg",
 		},
 		fields: [
 			{
-				name: "👤 Pusher",
-				value: `\`${payload.pusher || "unknown"}\``,
+				name: "📦 Repository",
+				value: `\`${repoName}\``,
 				inline: true,
 			},
 			{
-				name: "📝 Commit Message",
-				value: `> ${payload.commits?.[0]?.message || "No commit message"}`,
-				inline: false,
+				name: "🏷️ Type",
+				value: `\`${repoType}\``,
+				inline: true,
 			},
 			{
-				name: "🆔 Commit ID",
-				value: `\`${payload.commits?.[0]?.id?.slice(0, 7) || "n/a"}\``,
+				name: "🆔 Commit SHA",
+				value: `\`${commitSha?.slice(0, 7) || "n/a"}\``,
 				inline: true,
 			},
 			{
@@ -82,6 +94,30 @@ export function createHuggingFaceEmbed(payload) {
 			icon_url: "https://cdn-icons-png.flaticon.com/512/5968/5968705.png",
 		},
 	};
+
+	// Add updated refs information if available
+	if (updatedRefs.length > 0) {
+		const refsInfo = updatedRefs
+			.map((ref) => {
+				const refName = ref.ref
+					.replace("refs/heads/", "")
+					.replace("refs/tags/", "");
+				const action =
+					ref.oldSha === null
+						? "created"
+						: ref.newSha === null
+						? "deleted"
+						: "updated";
+				return `\`${refName}\` (${action})`;
+			})
+			.join(", ");
+
+		embed.fields.push({
+			name: "🌿 Updated References",
+			value: refsInfo,
+			inline: false,
+		});
+	}
 
 	return embed;
 }

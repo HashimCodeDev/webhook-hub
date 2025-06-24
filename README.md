@@ -33,7 +33,7 @@ webhook-hub/
 ### 1. Clone and Install
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/HashimCodeDev/webhook-hub
 cd webhook-hub
 pnpm install
 ```
@@ -71,51 +71,96 @@ pnpm start
 
 The server will start on `http://localhost:3000`
 
+## 🌐 Live Deployment
+
+The webhook hub is deployed and available at: **https://webhook-hub.onrender.com**
+
 ## 🔗 Webhook Endpoints
 
 ### Hugging Face Webhook
 
-- **URL**: `POST /webhook/huggingface`
+- **Local URL**: `POST http://localhost:3000/webhook/huggingface`
+- **Live URL**: `POST https://webhook-hub.onrender.com/webhook/huggingface`
 - **Purpose**: Receives repository update notifications
-- **Discord Message**: Rich embed with commit info, author, branch, and repository details
+- **Discord Message**: Rich embed with commit info, pusher, commit message, and repository details
 
 ### Vercel Webhook
 
-- **URL**: `POST /webhook/vercel`
+- **Local URL**: `POST http://localhost:3000/webhook/vercel`
+- **Live URL**: `POST https://webhook-hub.onrender.com/webhook/vercel`
 - **Purpose**: Receives deployment status notifications
 - **Discord Message**: Rich embed with deployment status, project info, and deployment URL
 - **Security**: Optional HMAC signature verification
 
 ### Test Webhook
 
-- **URL**: `POST /webhook/test`
+- **Local URL**: `POST http://localhost:3000/webhook/test`
+- **Live URL**: `POST https://webhook-hub.onrender.com/webhook/test`
 - **Purpose**: Testing and debugging webhook payloads
 
 ## 🧪 Testing with cURL
 
 ### Test Hugging Face Webhook
 
+**Local testing:**
+
 ```bash
 curl -X POST http://localhost:3000/webhook/huggingface \
   -H "Content-Type: application/json" \
-  -H "x-event-type: push" \
   -d '{
-    "repo": {
-      "name": "my-awesome-model",
-      "url": "https://huggingface.co/username/my-awesome-model"
+    "event": {
+      "action": "update",
+      "scope": "repo.content"
     },
-    "commits": [{
-      "id": "abc123def456",
-      "message": "Update model weights and documentation",
-      "author": {
-        "name": "John Doe"
+    "repo": {
+      "type": "model",
+      "name": "my-awesome-model",
+      "url": {
+        "web": "https://huggingface.co/username/my-awesome-model"
+      },
+      "headSha": "c379e821c9c95d613899e8c4343e4bfee2b0c600"
+    },
+    "updatedRefs": [
+      {
+        "ref": "refs/heads/main",
+        "oldSha": "ce9a4674fa833a68d5a73ec355f0ea95eedd60b7",
+        "newSha": "c379e821c9c95d613899e8c4343e4bfee2b0c600"
       }
-    ],
-    "ref": "refs/heads/main"
+    ]
+  }'
+```
+
+**Live deployment testing:**
+
+```bash
+curl -X POST https://webhook-hub.onrender.com/webhook/huggingface \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": {
+      "action": "update",
+      "scope": "repo.content"
+    },
+    "repo": {
+      "type": "model",
+      "name": "my-awesome-model",
+      "url": {
+        "web": "https://huggingface.co/username/my-awesome-model"
+      },
+      "headSha": "c379e821c9c95d613899e8c4343e4bfee2b0c600"
+    },
+    "updatedRefs": [
+      {
+        "ref": "refs/heads/main",
+        "oldSha": "ce9a4674fa833a68d5a73ec355f0ea95eedd60b7",
+        "newSha": "c379e821c9c95d613899e8c4343e4bfee2b0c600"
+      }
+    ]
   }'
 ```
 
 ### Test Vercel Webhook
+
+**Local testing:**
 
 ```bash
 curl -X POST http://localhost:3000/webhook/vercel \
@@ -137,14 +182,25 @@ curl -X POST http://localhost:3000/webhook/vercel \
   }'
 ```
 
-### Test Generic Webhook
+**Live deployment testing:**
 
 ```bash
-curl -X POST http://localhost:3000/webhook/test \
+curl -X POST https://webhook-hub.onrender.com/webhook/vercel \
   -H "Content-Type: application/json" \
   -d '{
-    "message": "Hello from webhook test!",
-    "timestamp": "2024-01-01T12:00:00Z"
+    "type": "deployment.succeeded",
+    "deployment": {
+      "id": "dpl_123456",
+      "url": "my-app-abc123.vercel.app",
+      "state": "READY",
+      "target": "production",
+      "meta": {
+        "githubCommitSha": "abc123def456"
+      }
+    },
+    "project": {
+      "name": "my-awesome-app"
+    }
   }'
 ```
 
@@ -154,17 +210,36 @@ You can also test using Postman. Here are the request configurations:
 
 ### Hugging Face Webhook Request
 
+**Local testing:**
+
 - **Method**: POST
 - **URL**: `http://localhost:3000/webhook/huggingface`
 - **Headers**:
   - `Content-Type: application/json`
-  - `x-event-type: push`
+- **Body** (raw JSON): Use the JSON from the cURL example above
+
+**Live deployment testing:**
+
+- **Method**: POST
+- **URL**: `https://webhook-hub.onrender.com/webhook/huggingface`
+- **Headers**:
+  - `Content-Type: application/json`
 - **Body** (raw JSON): Use the JSON from the cURL example above
 
 ### Vercel Webhook Request
 
+**Local testing:**
+
 - **Method**: POST
 - **URL**: `http://localhost:3000/webhook/vercel`
+- **Headers**:
+  - `Content-Type: application/json`
+- **Body** (raw JSON): Use the JSON from the cURL example above
+
+**Live deployment testing:**
+
+- **Method**: POST
+- **URL**: `https://webhook-hub.onrender.com/webhook/vercel`
 - **Headers**:
   - `Content-Type: application/json`
 - **Body** (raw JSON): Use the JSON from the cURL example above
