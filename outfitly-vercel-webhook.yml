@@ -1,0 +1,192 @@
+# GitHub Actions workflow for OutFitly Vercel deployment notifications
+# Place this file in your OutFitly repository at: .github/workflows/vercel-webhook.yml
+
+name: 🚀 OutFitly Deployment Notifications
+
+on:
+  # Trigger on pushes to main branch (when Vercel auto-deploys)
+  push:
+    branches: [main, master]
+    paths:
+      - "frontend/**" # Only trigger for frontend changes
+      - ".github/workflows/**" # Also trigger for workflow changes
+
+  # Trigger on pull requests to main (for preview deployments)
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "frontend/**"
+
+  # Manual trigger option
+  workflow_dispatch:
+    inputs:
+      deployment_type:
+        description: "Deployment type"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - preview
+
+env:
+  WEBHOOK_HUB_URL: https://webhook-hub.onrender.com/webhook/vercel
+  PROJECT_NAME: OutFitly
+  # TODO: Replace with your actual Vercel app URL
+  VERCEL_APP_URL: your-outfitly-app.vercel.app
+
+jobs:
+  notify-deployment-start:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine deployment environment
+        id: env
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ] || [ "${{ github.ref }}" == "refs/heads/master" ]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+            echo "app_url=https://${{ env.VERCEL_APP_URL }}" >> $GITHUB_OUTPUT
+          else
+            echo "environment=preview" >> $GITHUB_OUTPUT
+            echo "app_url=https://outfitly-git-${{ github.ref_name }}-hashimcodedev.vercel.app" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send deployment.created notification
+        run: |
+          curl -X POST "${{ env.WEBHOOK_HUB_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "type": "deployment.created",
+              "payload": {
+                "deployment": {
+                  "id": "${{ github.sha }}",
+                  "url": "${{ steps.env.outputs.app_url }}",
+                  "state": "BUILDING",
+                  "target": "${{ steps.env.outputs.environment }}",
+                  "meta": {
+                    "githubCommitSha": "${{ github.sha }}",
+                    "githubCommitMessage": "${{ github.event.head_commit.message }}",
+                    "githubBranch": "${{ github.ref_name }}",
+                    "githubAuthor": "${{ github.event.head_commit.author.name }}"
+                  }
+                },
+                "project": {
+                  "name": "${{ env.PROJECT_NAME }}"
+                }
+              },
+              "region": "sfo1"
+            }'
+
+      - name: Log deployment start
+        run: |
+          echo "🚀 Deployment started for OutFitly"
+          echo "📦 Environment: ${{ steps.env.outputs.environment }}"
+          echo "🌐 URL: ${{ steps.env.outputs.app_url }}"
+          echo "📝 Commit: ${{ github.sha }}"
+
+  notify-deployment-success:
+    runs-on: ubuntu-latest
+    needs: notify-deployment-start
+    if: always() && (needs.notify-deployment-start.result == 'success')
+
+    steps:
+      - name: Wait for deployment
+        run: |
+          echo "⏳ Waiting 60 seconds for Vercel deployment to complete..."
+          sleep 60
+
+      - name: Determine deployment environment
+        id: env
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ] || [ "${{ github.ref }}" == "refs/heads/master" ]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+            echo "app_url=https://${{ env.VERCEL_APP_URL }}" >> $GITHUB_OUTPUT
+          else
+            echo "environment=preview" >> $GITHUB_OUTPUT
+            echo "app_url=https://outfitly-git-${{ github.ref_name }}-hashimcodedev.vercel.app" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check deployment status
+        id: check
+        run: |
+          # Try to check if the deployment is live
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ steps.env.outputs.app_url }}" || echo "000")
+          if [ "$HTTP_STATUS" -eq 200 ] || [ "$HTTP_STATUS" -eq 301 ] || [ "$HTTP_STATUS" -eq 302 ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "state=READY" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "state=ERROR" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send deployment result notification
+        run: |
+          curl -X POST "${{ env.WEBHOOK_HUB_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "type": "deployment.${{ steps.check.outputs.status }}ed",
+              "payload": {
+                "deployment": {
+                  "id": "${{ github.sha }}",
+                  "url": "${{ steps.env.outputs.app_url }}",
+                  "state": "${{ steps.check.outputs.state }}",
+                  "target": "${{ steps.env.outputs.environment }}",
+                  "meta": {
+                    "githubCommitSha": "${{ github.sha }}",
+                    "githubCommitMessage": "${{ github.event.head_commit.message }}",
+                    "githubBranch": "${{ github.ref_name }}",
+                    "githubAuthor": "${{ github.event.head_commit.author.name }}"
+                  }
+                },
+                "project": {
+                  "name": "${{ env.PROJECT_NAME }}"
+                }
+              },
+              "region": "sfo1"
+            }'
+
+      - name: Log deployment result
+        run: |
+          echo "🎉 Deployment ${{ steps.check.outputs.status }}ed for OutFitly"
+          echo "🌐 App URL: ${{ steps.env.outputs.app_url }}"
+          echo "📊 HTTP Status: ${{ steps.check.outputs.status }}"
+
+  notify-preview-deployment:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Send preview deployment notification
+        run: |
+          curl -X POST "${{ env.WEBHOOK_HUB_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "type": "deployment.created",
+              "payload": {
+                "deployment": {
+                  "id": "${{ github.event.pull_request.head.sha }}",
+                  "url": "https://outfitly-git-${{ github.head_ref }}-hashimcodedev.vercel.app",
+                  "state": "BUILDING",
+                  "target": "preview",
+                  "meta": {
+                    "githubCommitSha": "${{ github.event.pull_request.head.sha }}",
+                    "githubCommitMessage": "${{ github.event.pull_request.title }}",
+                    "githubBranch": "${{ github.head_ref }}",
+                    "githubPR": "${{ github.event.pull_request.number }}"
+                  }
+                },
+                "project": {
+                  "name": "${{ env.PROJECT_NAME }} (Preview)"
+                }
+              },
+              "region": "sfo1"
+            }'
+
+      - name: Log preview deployment
+        run: |
+          echo "🔍 Preview deployment started for PR #${{ github.event.pull_request.number }}"
+          echo "🌐 Preview URL: https://outfitly-git-${{ github.head_ref }}-hashimcodedev.vercel.app"
