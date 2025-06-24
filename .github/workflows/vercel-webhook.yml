@@ -1,0 +1,57 @@
+# GitHub Actions workflow to simulate Vercel webhooks
+# Place this in your Vercel project repository at .github/workflows/vercel-webhook.yml
+
+name: Vercel Deployment Webhook Simulation
+
+on:
+  # Trigger on pushes to main branch (when Vercel auto-deploys)
+  push:
+    branches: [main, master]
+  
+  # Trigger on successful deployments
+  deployment_status:
+
+jobs:
+  notify-webhook-hub:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'deployment_status' || github.event_name == 'push'
+    
+    steps:
+      - name: Determine deployment status
+        id: status
+        run: |
+          if [ "${{ github.event_name }}" == "deployment_status" ]; then
+            echo "event_type=deployment.${{ github.event.deployment_status.state }}" >> $GITHUB_OUTPUT
+            echo "deployment_url=${{ github.event.deployment_status.target_url }}" >> $GITHUB_OUTPUT
+            echo "environment=${{ github.event.deployment.environment }}" >> $GITHUB_OUTPUT
+          else
+            echo "event_type=deployment.created" >> $GITHUB_OUTPUT
+            echo "deployment_url=https://your-app.vercel.app" >> $GITHUB_OUTPUT
+            echo "environment=production" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify Webhook Hub
+        run: |
+          curl -X POST https://webhook-hub.onrender.com/webhook/vercel \
+            -H "Content-Type: application/json" \
+            -d '{
+              "type": "${{ steps.status.outputs.event_type }}",
+              "payload": {
+                "deployment": {
+                  "id": "${{ github.sha }}",
+                  "url": "${{ steps.status.outputs.deployment_url }}",
+                  "state": "${{ github.event.deployment_status.state || 'BUILDING' }}",
+                  "target": "${{ steps.status.outputs.environment }}",
+                  "meta": {
+                    "githubCommitSha": "${{ github.sha }}"
+                  }
+                },
+                "project": {
+                  "name": "${{ github.repository }}"
+                }
+              },
+              "region": "sfo1"
+            }'
+
+      - name: Log notification
+        run: echo "Sent webhook notification for ${{ steps.status.outputs.event_type }}"
