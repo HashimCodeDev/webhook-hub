@@ -33,7 +33,7 @@ env:
   WEBHOOK_HUB_URL: https://webhook-hub.onrender.com/webhook/vercel
   PROJECT_NAME: OutFitly
   # TODO: Replace with your actual Vercel app URL
-  VERCEL_APP_URL: your-outfitly-app.vercel.app
+  VERCEL_APP_URL: https://out-fitly-coral.vercel.app/
 
 jobs:
   notify-deployment-start:
